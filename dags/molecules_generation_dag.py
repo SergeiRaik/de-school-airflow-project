@@ -6,9 +6,14 @@ from airflow.exceptions import AirflowException
 from airflow.sdk import DAG, get_current_context
 
 from lib.properties_calculation import PropertiesCalculator
+from lib.fingerprints import get_fingerprint_function
+
+from sklearn.cluster import KMeans
+from rdkit.DataStructs import ConvertToNumpyArray
 
 from rdkit import Chem
 import pandas as pd
+import numpy as np
 import io
 import re
 
@@ -172,6 +177,27 @@ def calculate_properties():
     calculator = PropertiesCalculator()
     molecules_df["mol"] = molecules_df["molecule"].apply(Chem.MolFromSmiles)
     molecules_df = calculator.calculate_properties(molecules_df)
+
+    fingerprint_fn = get_fingerprint_function("ECFP4")
+    molecules_df["fingerprint"] = molecules_df["mol"].apply(fingerprint_fn)
+    def fp_to_array(fp):
+        arr = np.zeros((2048,), dtype=np.int8)
+        ConvertToNumpyArray(fp, arr)
+        return arr
+
+    molecules_df["fingerprint_array"] = molecules_df["fingerprint"].apply(fp_to_array)
+    X = np.array([
+        fp_to_array(fp)
+        for fp in molecules_df["fingerprint"]
+    ])
+
+    model = KMeans(
+        n_clusters=10,
+        random_state=42,
+        n_init="auto",
+    )
+
+    molecules_df["cluster"] = model.fit_predict(X)
 
     # Upload to silver
     dataset_id = context["params"]["dataset_id"]
