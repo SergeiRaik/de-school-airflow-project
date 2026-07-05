@@ -5,6 +5,8 @@ from airflow.exceptions import AirflowException
 
 from airflow.sdk import DAG, get_current_context
 
+from lib.properties_calculation import PropertiesCalculator
+
 from rdkit import Chem
 import pandas as pd
 import io
@@ -105,26 +107,83 @@ def validate_files():
     return bronze_keys
 
 
-def normalize_attachment(smiles: str) -> str:
-    """
-    Convert '*' attachment points to RDKit atom map notation.
-    """
-
-    if "[*:1]" in smiles:
-        return smiles
-
-    return smiles.replace("*", "[*:1]")
+def merge_molecule_blocks(scaffold, r_group):
+   combined_smiles = scaffold + "." + r_group
+   mol = Chem.MolFromSmiles(combined_smiles)
+   prod = Chem.molzip(mol)
+   return Chem.MolToSmiles(prod)
 
 
-def validate_smiles(smiles: str):
-    normalized = normalize_attachment(smiles)
+def generate_molecules():
+    context = get_current_context()
 
-    mol = Chem.MolFromSmiles(normalized)
+    files = context["ti"].xcom_pull(task_ids="validate_input_files")
 
-    if mol is None:
-        raise ValueError(f"Invalid SMILES: {smiles}")
+    scaffold_key = files["scaffold_key"]
+    rgroup_key = files["rgroups_key"]
 
-    return normalized
+    s3 = S3Hook(aws_conn_id="aws_s3")
+
+    # Read CSVs from S3
+    scaffold_df = pd.read_csv(
+        s3.get_key(key=scaffold_key, bucket_name=BUCKET_NAME).get()["Body"],
+        skiprows=1,
+        names=["scaffold"],
+    )
+
+    rgroup_df = pd.read_csv(
+        s3.get_key(key=rgroup_key, bucket_name=BUCKET_NAME).get()["Body"],
+        skiprows=1,
+        names=["rgroup"],
+    )
+
+    molecules_df = scaffold_df.merge(rgroup_df, how="cross")
+
+    molecules_df["molecule"] = molecules_df.apply(
+        lambda row: merge_molecule_blocks(row['scaffold'], row['rgroup']), axis=1
+    )
+
+    # Upload to bronze
+    dataset_id = context["params"]["dataset_id"]
+    output_key = f"bronze/{dataset_id}_molecules.csv"
+    s3.load_string(
+        string_data=molecules_df.to_csv(index=False),
+        key=output_key,
+        bucket_name=BUCKET_NAME,
+        replace=True,
+    )
+
+    return output_key
+
+def calculate_properties():
+    context = get_current_context()
+
+    files = context["ti"].xcom_pull(task_ids="generate_molecules")
+
+    molecules_key = files
+
+    s3 = S3Hook(aws_conn_id="aws_s3")
+
+    # Read CSV from S3
+    molecules_df = pd.read_csv(
+        s3.get_key(key=molecules_key, bucket_name=BUCKET_NAME).get()["Body"]
+    )
+
+    calculator = PropertiesCalculator()
+    molecules_df["mol"] = molecules_df["molecule"].apply(Chem.MolFromSmiles)
+    molecules_df = calculator.calculate_properties(molecules_df)
+
+    # Upload to silver
+    dataset_id = context["params"]["dataset_id"]
+    output_key = f"silver/{dataset_id}_molecules_with_properties.csv"
+    s3.load_string(
+        string_data=molecules_df.to_csv(index=False),
+        key=output_key,
+        bucket_name=BUCKET_NAME,
+        replace=True,
+    )
+
+    return output_key
 
 
 
@@ -152,16 +211,18 @@ with DAG(
         python_callable=validate_files,
     )
 
-    generate_molecules_op = EmptyOperator(
+    generate_molecules_op = PythonOperator(
         task_id='generate_molecules',
+        python_callable=generate_molecules,
     )
 
-    upload_output = EmptyOperator(
-        task_id='upload_output',
+    calculate_properties_op = PythonOperator(
+        task_id='calculate_properties',
+        python_callable=calculate_properties,
     )
 
     finish_op = EmptyOperator(
         task_id='finish',
     )
 
-    start_op >> check_input_files_op >> validate_input_files_op >> generate_molecules_op >> upload_output >> finish_op
+    start_op >> check_input_files_op >> validate_input_files_op >> generate_molecules_op >> calculate_properties_op >> finish_op
