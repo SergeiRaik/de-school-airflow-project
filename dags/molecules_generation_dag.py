@@ -1,21 +1,20 @@
-from airflow.providers.standard.operators.empty import EmptyOperator
-from airflow.providers.standard.operators.python import PythonOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.exceptions import AirflowException
-
-from airflow.sdk import DAG, get_current_context
-
-from lib.properties_calculation import PropertiesCalculator
-from lib.fingerprints import get_fingerprint_function
-
-from sklearn.cluster import KMeans
-from rdkit.DataStructs import ConvertToNumpyArray
-
-from rdkit import Chem
-import pandas as pd
-import numpy as np
 import io
 import re
+
+import numpy as np
+import pandas as pd
+from airflow.exceptions import AirflowException
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.sdk import DAG, get_current_context
+from rdkit import Chem
+from rdkit.DataStructs import ConvertToNumpyArray
+from sklearn.cluster import KMeans
+
+from lib.fingerprints import get_fingerprint_function
+from lib.properties_calculation import PropertiesCalculator
+
 
 BUCKET_NAME = 'molecules'
 
@@ -160,6 +159,7 @@ def generate_molecules():
 
     return output_key
 
+
 def calculate_properties():
     context = get_current_context()
 
@@ -211,10 +211,6 @@ def calculate_properties():
 
     return output_key
 
-
-
-def do_nothing():
-    pass
 
 with DAG(
     dag_id='generate_molecules',
