@@ -10,7 +10,7 @@ with DAG(
     dag_id='generate_molecules',
     schedule="@weekly",
     params={
-        'owerwrite': False,
+        'overwrite': False,
     }
 ) as dag:
     start_op = EmptyOperator(

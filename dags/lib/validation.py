@@ -1,4 +1,5 @@
 import re
+import logging
 
 import pandas as pd
 from rdkit import Chem
@@ -32,6 +33,12 @@ def check_input_files(params):
     }
 
     dataset_ids = scaffolds & rgroups
+
+    logging.info("overwrite = %s", overwrite)
+    logging.info("raw_files = %s", raw_files)
+    logging.info("scaffolds = %s", scaffolds)
+    logging.info("rgroups = %s", rgroups)
+    logging.info("dataset_ids = %s", dataset_ids)
 
     datasets = []
 
