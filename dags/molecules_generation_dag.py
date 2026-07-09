@@ -8,8 +8,9 @@ from lib.processing import generate_molecules, calculate_properties
 
 with DAG(
     dag_id='generate_molecules',
+    schedule="@weekly",
     params={
-        'dataset_id': "id001",
+        'owerwrite': False,
     }
 ) as dag:
     start_op = EmptyOperator(
