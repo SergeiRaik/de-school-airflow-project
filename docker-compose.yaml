@@ -314,7 +314,8 @@ services:
       - -c
       - |
         mc alias set storage http://storage:9000 minioadmin minioadmin
-        mc mb --ignore-existing storage/molecules
+        mc mb --ignore-existing storage/molecules/raw
+        mc mb --ignore-existing storage/molecules/processed
 
 volumes:
   postgres-db-volume:

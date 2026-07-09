@@ -44,7 +44,7 @@ def validate_files(ti):
 
     s3 = S3Hook(aws_conn_id="aws_s3")
 
-    bronze_keys = {}
+    output_keys = {}
 
     for input_key in (scaffold_key, rgroup_key):
 
@@ -81,19 +81,19 @@ def validate_files(ti):
                 f"{input_key}: invalid SMILES found: {invalid[:5]}"
             )
 
-        # 5. Upload to bronze
-        bronze_key = input_key.replace("raw/", "bronze/", 1)
+        # 5. Upload to processed
+        output_key = input_key.replace("raw/", "processed/", 1)
 
         s3.load_string(
             string_data=df.to_csv(index=False),
-            key=bronze_key,
+            key=output_key,
             bucket_name=BUCKET_NAME,
             replace=True,
         )
 
-        if "scaffold" in bronze_key:
-            bronze_keys["scaffold_key"] = bronze_key
+        if "scaffold" in output_key:
+            output_keys["scaffold_key"] = output_key
         else:
-            bronze_keys["rgroups_key"] = bronze_key
+            output_keys["rgroups_key"] = output_key
 
-    return bronze_keys
+    return output_keys

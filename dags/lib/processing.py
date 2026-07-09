@@ -43,9 +43,9 @@ def generate_molecules(ti, params):
         lambda row: merge_molecule_blocks(row['scaffold'], row['rgroup']), axis=1
     )
 
-    # Upload to bronze
+    # Upload to processed
     dataset_id = params["dataset_id"]
-    output_key = f"bronze/{dataset_id}_molecules.csv"
+    output_key = f"processed/{dataset_id}_molecules.csv"
     s3.load_string(
         string_data=molecules_df.to_csv(index=False),
         key=output_key,
@@ -95,7 +95,7 @@ def calculate_properties(ti, params):
 
     # Upload to silver
     dataset_id = params["dataset_id"]
-    output_key = f"silver/{dataset_id}_molecules_with_properties.csv"
+    output_key = f"processed/{dataset_id}_molecules.csv"
     s3.load_string(
         string_data=molecules_df.to_csv(index=False),
         key=output_key,
