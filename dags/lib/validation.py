@@ -5,6 +5,8 @@ import pandas as pd
 from rdkit import Chem
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.exceptions import AirflowException
+import pandera.pandas as pa
+from pandera import Check
 
 from .constants import BUCKET_NAME
 
@@ -134,3 +136,44 @@ def validate_files(ti):
         })
 
     return results
+
+
+MOLECULE_SCHEMA = pa.DataFrameSchema(
+    {
+        "mw": pa.Column(float, Check.gt(0), nullable=False),
+        "tpsa": pa.Column(float, Check.ge(0), nullable=False),
+        "h_acceptors": pa.Column(int, Check.ge(0), nullable=False),
+        "h_donors": pa.Column(int, Check.ge(0), nullable=False),
+        "ring_count": pa.Column(int, Check.ge(0), nullable=False),
+    },
+    checks=Check(lambda df: ~df.isnull().values.any(), error="Dataset contains null values"),
+    coerce=True,
+    strict=False,
+)
+
+
+def validate_molecule_dataset(s3, key):
+    df = pd.read_csv(
+        s3.get_key(
+            key=key,
+            bucket_name=BUCKET_NAME,
+        ).get()["Body"]
+    )
+
+    if df.isnull().values.any():
+        raise ValueError(f"{key}: dataset contains null values")
+
+    MOLECULE_SCHEMA.validate(df)
+
+    return key
+
+
+def validate_calculated_properties(ti):
+    keys = ti.xcom_pull(task_ids="calculate_properties")
+
+    s3 = S3Hook(aws_conn_id="aws_s3")
+
+    for key in keys:
+        validate_molecule_dataset(s3, key)
+
+    return keys

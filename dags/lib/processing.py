@@ -102,6 +102,7 @@ def calculate_dataset_properties(s3, files):
     )
 
     molecules_df["cluster"] = model.fit_predict(X)
+    molecules_df = molecules_df.drop(columns=["mol", "fingerprint"])
 
     output_key = files["molecules_key"]
 
